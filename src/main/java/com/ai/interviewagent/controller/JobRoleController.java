@@ -6,6 +6,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/v1/job-roles")
 public class JobRoleController {
@@ -20,5 +22,11 @@ public class JobRoleController {
     public ResponseEntity<JobRole> createJobRole(@RequestBody JobRole jobRole) {
         JobRole savedRole = jobRoleRepository.save(jobRole);
         return new ResponseEntity<>(savedRole, HttpStatus.CREATED);
+    }
+
+    @GetMapping
+    public ResponseEntity<List<JobRole>> getAllJobRoles() {
+        List<JobRole> roles = jobRoleRepository.findAll();
+        return ResponseEntity.ok(roles);
     }
 }

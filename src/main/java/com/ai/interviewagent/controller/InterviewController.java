@@ -8,13 +8,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
+
 import java.security.Principal;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
 import java.util.Map;
 
 @Slf4j
@@ -32,40 +28,22 @@ public class InterviewController {
 
     @PostMapping("/start")
     public ResponseEntity<InterviewSessionResponse> startInterview(@RequestBody StartInterviewRequest request, Principal principal) {
-        log.info("Received request to start interview from user [{}]", principal.getName());
-
         String userEmail = principal.getName();
         User user = userRepository.findByEmail(userEmail)
                 .orElseThrow(() -> new UsernameNotFoundException("Authenticated user not found in database: " + userEmail));
-        String userId = user.getId();
-
-        InterviewSessionResponse response = interviewService.startInterview(request, userId);
-
-
-        log.info("Successfully initiated interview session [{}] for user [{}]", response.getInterviewId(), userEmail);
+        InterviewSessionResponse response = interviewService.startInterview(request, user.getId());
         return new ResponseEntity<>(response, HttpStatus.CREATED);
     }
 
     @GetMapping("/{interviewId}/next-question")
     public ResponseEntity<?> getNextQuestion(@PathVariable String interviewId, Principal principal) {
-        log.info("User [{}] is requesting the next question for interview [{}]", principal.getName(), interviewId);
-
         try {
             String userEmail = principal.getName();
             QuestionResponse questionResponse = interviewService.getNextQuestion(interviewId, userEmail);
             return ResponseEntity.ok(questionResponse);
-
         } catch (IllegalStateException e) {
-
-            log.info("Interview [{}] is complete. Sending completion message.", interviewId);
             return ResponseEntity.ok().body(Map.of("message", e.getMessage()));
-
-        } catch (IllegalArgumentException | SecurityException e) {
-            log.error("Client error while fetching next question for interview [{}]: {}", interviewId, e.getMessage());
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", e.getMessage()));
-
         } catch (Exception e) {
-            log.error("An unexpected error occurred for interview [{}]:", interviewId, e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("error", "An internal server error occurred."));
         }
     }
@@ -75,35 +53,48 @@ public class InterviewController {
                                                             @RequestBody SubmitAnswerRequest request,
                                                             Principal principal) {
         String userEmail = principal.getName();
-        log.info("Received answer submission from user [{}] for interview [{}]", userEmail, interviewId);
-
-        try {
-            Map<String, String> response = interviewService.submitAnswer(interviewId, userEmail, request);
-            return ResponseEntity.ok(response);
-
-        } catch (IllegalArgumentException | SecurityException e) {
-            log.error("Client error while submitting answer for interview [{}]: {}", interviewId, e.getMessage());
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", e.getMessage()));
-
-        } catch (Exception e) {
-            log.error("An unexpected error occurred while submitting answer for interview [{}]:", interviewId, e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("error", "An internal server error occurred."));
-        }
+        Map<String, String> response = interviewService.submitAnswer(interviewId, userEmail, request);
+        return ResponseEntity.ok(response);
     }
 
     @GetMapping("/{interviewId}/results")
     public ResponseEntity<?> getInterviewResults(@PathVariable String interviewId, Principal principal) {
-        log.info("User [{}] is requesting results for interview [{}]", principal.getName(), interviewId);
+        String userEmail = principal.getName();
+        InterviewResultDto resultDto = interviewService.getInterviewResults(interviewId, userEmail);
+        return ResponseEntity.ok(resultDto);
+    }
+
+    @PostMapping("/{interviewId}/analyze-text-answer")
+    public ResponseEntity<Map<String, String>> submitTextAnswer(
+            @PathVariable String interviewId,
+            @RequestBody SubmitTextAnswerRequest request,
+            Principal principal) {
+
+        String userEmail = principal.getName();
+        log.info("User [{}] se text jawab mila hai interview [{}] ke liye", userEmail, interviewId);
+        try {
+            Map<String, String> response = interviewService.submitTextAnswerAndAnalyze(interviewId, userEmail, request);
+            log.info("AI analysis safaltapoorvak poora hua interview [{}] ke liye.", interviewId);
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            log.error("Text jawab submit karte waqt error aaya interview [{}]:", interviewId, e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/generate-and-start")
+    public ResponseEntity<InterviewSessionResponse> generateAndStartInterview(@RequestBody GenerateInterviewRequest request, Principal principal) {
+        log.info("User [{}] se dynamic interview generate karne ki request aayi hai", principal.getName());
         try {
             String userEmail = principal.getName();
-            InterviewResultDto resultDto = interviewService.getInterviewResults(interviewId, userEmail);
-            return ResponseEntity.ok(resultDto);
-        } catch (IllegalArgumentException | SecurityException e) {
-            log.error("Client error while fetching results for interview [{}]: {}", interviewId, e.getMessage());
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", e.getMessage()));
+            InterviewSessionResponse response = interviewService.generateAndStartInterview(request, userEmail);
+            log.info("AI-generated interview safaltapoorvak shuru ho gaya, ID: {}", response.getInterviewId());
+            return new ResponseEntity<>(response, HttpStatus.CREATED);
         } catch (Exception e) {
-            log.error("An unexpected error occurred while fetching results for interview [{}]:", interviewId, e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("error", "An internal server error occurred."));
+            log.error("AI interview generate karte waqt error aaya:", e);
+            return ResponseEntity
+                    .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(null);
         }
     }
 }
